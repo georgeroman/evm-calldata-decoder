@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EVM Calldata Decoder</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>EVM Calldata Decoder</h1>
+            <p class="subtitle">Decode EVM calldata using 4byte.directory</p>
+        </header>
+
+        <main>
+            <section class="input-section">
+                <label for="calldata-input">Paste your calldata:</label>
+                <textarea
+                    id="calldata-input"
+                    placeholder="0x23b872dd000000000000000000000000..."
+                    spellcheck="false"
+                ></textarea>
+                <div class="button-group">
+                    <button id="decode-btn">Decode</button>
+                    <button id="clear-btn" class="secondary">Clear</button>
+                </div>
+            </section>
+
+            <section class="output-section" id="output-section">
+                <div class="placeholder" id="placeholder">
+                    <p>Decoded calldata will appear here</p>
+                </div>
+                <div class="result" id="result" style="display: none;">
+                    <div class="result-header">
+                        <h2>Decoded Result</h2>
+                        <span class="selector-badge" id="selector-badge"></span>
+                    </div>
+
+                    <div class="result-card" id="function-info">
+                        <h3>Function Signature</h3>
+                        <div class="signatures-list" id="signatures-list"></div>
+                    </div>
+
+                    <div class="result-card" id="params-card">
+                        <h3>Parameters</h3>
+                        <div class="params-table" id="params-table"></div>
+                    </div>
+
+                    <div class="result-card">
+                        <h3>Raw Calldata</h3>
+                        <div class="raw-calldata" id="raw-calldata"></div>
+                    </div>
+                </div>
+
+                <div class="error" id="error" style="display: none;">
+                    <p id="error-message"></p>
+                </div>
+
+                <div class="loading" id="loading" style="display: none;">
+                    <div class="spinner"></div>
+                    <p>Decoding...</p>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Powered by <a href="https://www.4byte.directory/" target="_blank" rel="noopener">4byte.directory</a></p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
