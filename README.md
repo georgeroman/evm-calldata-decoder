@@ -1,6 +1,6 @@
 # EVM Calldata Decoder
 
-A web application for decoding EVM calldata using [4byte.directory](https://www.4byte.directory/).
+A web application for decoding EVM calldata using [4byte.directory](https://www.4byte.directory/). Available at [calldata.georgeroman.dev](https://calldata.georgeroman.dev).
 
 ## Features
 
