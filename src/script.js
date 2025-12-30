@@ -10,10 +10,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const signaturesList = document.getElementById('signatures-list');
     const paramsTable = document.getElementById('params-table');
     const paramsCard = document.getElementById('params-card');
-    const rawCalldata = document.getElementById('raw-calldata');
 
     let currentCalldata = '';
     let currentSignatures = [];
+    let decodedModel = null;      // Stores decoded structure for re-encoding
+    let currentTypes = [];        // Parameter types from signature
+    let currentSelector = '';     // 4-byte function selector
 
     decodeBtn.addEventListener('click', decode);
     clearBtn.addEventListener('click', clear);
@@ -39,6 +41,9 @@ document.addEventListener('DOMContentLoaded', () => {
         calldataInput.value = '';
         currentCalldata = '';
         currentSignatures = [];
+        decodedModel = null;
+        currentTypes = [];
+        currentSelector = '';
         showState('placeholder');
     }
 
@@ -104,7 +109,6 @@ document.addEventListener('DOMContentLoaded', () => {
         showState('result');
 
         selectorBadge.textContent = selector;
-        rawCalldata.textContent = calldata;
 
         // Display signatures
         signaturesList.innerHTML = '';
@@ -152,15 +156,23 @@ document.addEventListener('DOMContentLoaded', () => {
         const params = parseSignature(signature);
         const data = calldata.slice(10); // Remove selector
 
+        // Store for re-encoding
+        currentTypes = params;
+        currentSelector = calldata.slice(0, 10);
+
         paramsTable.innerHTML = '';
 
         if (params.length === 0) {
             paramsTable.innerHTML = '<p class="no-params">No parameters</p>';
+            decodedModel = [];
             return;
         }
 
         try {
             const decoded = decodeParams(params, data);
+
+            // Store the decoded model for re-encoding
+            decodedModel = decoded;
 
             decoded.forEach((param, index) => {
                 const row = document.createElement('div');
@@ -179,8 +191,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 details.appendChild(typeLabel);
 
-                // Render value based on whether it's a complex type or simple
-                const valueContainer = renderValue(param.value, param.type);
+                // Render value with path for editing
+                const valueContainer = renderValue(param.value, param.type, [index]);
                 details.appendChild(valueContainer);
 
                 row.appendChild(indexEl);
@@ -192,35 +204,66 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function renderValue(value, type) {
+    function renderValue(value, type, path) {
         // Check if value is a complex structure (tuple or array)
         if (value && typeof value === 'object') {
             if (value.isTuple) {
-                return renderTuple(value);
+                return renderTuple(value, type, path);
             } else if (value.isArray) {
-                return renderArray(value);
+                return renderArray(value, type, path);
             }
         }
 
-        // Simple value
-        const valueEl = document.createElement('span');
-        valueEl.className = 'param-value';
+        // Simple value - create editable input
+        const container = document.createElement('span');
+        container.className = 'param-value editable';
 
         if (type === 'address') {
-            valueEl.classList.add('address');
+            container.classList.add('address');
         } else if (type && (type.startsWith('uint') || type.startsWith('int'))) {
-            valueEl.classList.add('number');
+            container.classList.add('number');
         } else if (type === 'bool') {
-            valueEl.classList.add('bool');
+            container.classList.add('bool');
         } else if (type === 'string') {
-            valueEl.classList.add('string');
+            container.classList.add('string');
+        } else if (type && type.startsWith('bytes')) {
+            container.classList.add('bytes');
         }
 
-        valueEl.textContent = value;
-        return valueEl;
+        const textarea = document.createElement('textarea');
+        textarea.className = 'value-input';
+        textarea.value = value;
+        textarea.dataset.path = JSON.stringify(path);
+        textarea.dataset.type = type;
+        textarea.rows = 1;
+
+        // Auto-size textarea height based on content
+        const resizeTextarea = () => {
+            textarea.style.height = 'auto';
+            textarea.style.height = textarea.scrollHeight + 'px';
+        };
+        // Use setTimeout to ensure DOM is ready
+        setTimeout(resizeTextarea, 0);
+        textarea.addEventListener('input', () => {
+            resizeTextarea();
+            handleValueEdit({ target: textarea });
+        });
+
+        textarea.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                // Reset to original value from model
+                const currentValue = getValueAtPath(decodedModel, path);
+                textarea.value = currentValue;
+                resizeTextarea();
+                textarea.blur();
+            }
+        });
+
+        container.appendChild(textarea);
+        return container;
     }
 
-    function renderTuple(tupleValue) {
+    function renderTuple(tupleValue, type, path) {
         const container = document.createElement('div');
         container.className = 'tuple-container expanded';
 
@@ -251,7 +294,9 @@ document.addEventListener('DOMContentLoaded', () => {
             fieldType.className = 'tuple-field-type';
             fieldType.textContent = field.type;
 
-            const fieldValue = renderValue(field.value, field.type);
+            // Pass nested path
+            const fieldPath = [...path, 'fields', index];
+            const fieldValue = renderValue(field.value, field.type, fieldPath);
 
             fieldRow.appendChild(fieldIndex);
             fieldRow.appendChild(fieldType);
@@ -269,7 +314,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return container;
     }
 
-    function renderArray(arrayValue) {
+    function renderArray(arrayValue, type, path) {
         const container = document.createElement('div');
         container.className = 'array-container expanded';
 
@@ -297,7 +342,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 itemIndex.className = 'array-item-index';
                 itemIndex.textContent = `[${index}]`;
 
-                const itemValue = renderValue(item.value, item.type);
+                // Pass nested path
+                const itemPath = [...path, 'items', index];
+                const itemValue = renderValue(item.value, item.type, itemPath);
 
                 itemRow.appendChild(itemIndex);
                 itemRow.appendChild(itemValue);
@@ -575,5 +622,388 @@ document.addEventListener('DOMContentLoaded', () => {
         const div = document.createElement('div');
         div.textContent = str;
         return div.innerHTML;
+    }
+
+    // ============================================
+    // EDIT HANDLERS
+    // ============================================
+
+    function handleValueEdit(event) {
+        const input = event.target;
+        const path = JSON.parse(input.dataset.path);
+        const type = input.dataset.type;
+        const newValue = input.value.trim();
+
+        // Get original value for comparison
+        const originalValue = getValueAtPath(decodedModel, path);
+        if (newValue === originalValue) {
+            return; // No change
+        }
+
+        // Validate the new value by attempting to encode it
+        try {
+            encodeParam(type, newValue);
+        } catch (err) {
+            showInputError(input, err.message);
+            return;
+        }
+
+        // Update the model
+        updateValueAtPath(decodedModel, path, newValue);
+
+        // Re-encode all parameters
+        try {
+            const newCalldata = reencodeCalldata();
+
+            // Update textarea and state
+            calldataInput.value = newCalldata;
+            currentCalldata = newCalldata;
+
+            // Visual feedback
+            showInputSuccess(input);
+        } catch (err) {
+            // Revert the model change
+            updateValueAtPath(decodedModel, path, originalValue);
+            showInputError(input, err.message);
+        }
+    }
+
+    function getValueAtPath(model, path) {
+        let current = model;
+
+        for (let i = 0; i < path.length; i++) {
+            const key = path[i];
+            if (typeof key === 'number') {
+                current = current[key];
+            } else if (key === 'fields') {
+                current = current.value.fields;
+            } else if (key === 'items') {
+                current = current.value.items;
+            }
+        }
+
+        return current.value !== undefined ? current.value : current;
+    }
+
+    function updateValueAtPath(model, path, newValue) {
+        let current = model;
+
+        // Navigate to parent
+        for (let i = 0; i < path.length - 1; i++) {
+            const key = path[i];
+            if (typeof key === 'number') {
+                current = current[key];
+            } else if (key === 'fields') {
+                current = current.value.fields;
+            } else if (key === 'items') {
+                current = current.value.items;
+            }
+        }
+
+        // Update the final value
+        const lastKey = path[path.length - 1];
+        if (typeof lastKey === 'number') {
+            current[lastKey].value = newValue;
+        }
+    }
+
+    function reencodeCalldata() {
+        // Extract values from model for encoding
+        const values = decodedModel.map(param => param.value);
+
+        // Encode parameters
+        const encodedParams = encodeParams(currentTypes, values);
+
+        // Combine with selector
+        return currentSelector + encodedParams;
+    }
+
+    function showInputError(input, message) {
+        input.classList.add('error');
+        input.classList.remove('success');
+        input.title = message;
+
+        setTimeout(() => {
+            input.classList.remove('error');
+            input.title = '';
+        }, 3000);
+    }
+
+    function showInputSuccess(input) {
+        input.classList.add('success');
+        input.classList.remove('error');
+        input.title = '';
+
+        setTimeout(() => {
+            input.classList.remove('success');
+        }, 300);
+    }
+
+    // ============================================
+    // ABI ENCODING FUNCTIONS
+    // ============================================
+
+    function encodeParams(types, values) {
+        // Calculate total head size first
+        let headSize = 0;
+        for (const type of types) {
+            headSize += isDynamicType(type) ? 32 : getStaticSizeBytes(type);
+        }
+
+        // Build heads and tails
+        let currentOffset = headSize;
+        const heads = [];
+        const tails = [];
+
+        for (let i = 0; i < types.length; i++) {
+            const type = types[i];
+            const value = values[i];
+
+            if (isDynamicType(type)) {
+                // Write offset in head, data in tail
+                heads.push(encodeUint256(currentOffset));
+                const tailData = encodeParam(type, value);
+                tails.push(tailData);
+                currentOffset += tailData.length / 2; // hex chars to bytes
+            } else {
+                // Static type goes directly in head
+                heads.push(encodeParam(type, value));
+            }
+        }
+
+        return heads.join('') + tails.join('');
+    }
+
+    function encodeParam(type, value) {
+        // Handle arrays
+        const arrayMatch = type.match(/^(.+)\[(\d*)\]$/);
+        if (arrayMatch) {
+            return encodeArray(arrayMatch[1], arrayMatch[2], value);
+        }
+
+        // Handle tuples
+        if (type.startsWith('(') && type.endsWith(')')) {
+            return encodeTuple(type, value);
+        }
+
+        // Basic types
+        if (type === 'address') {
+            return encodeAddress(value);
+        }
+
+        if (type === 'bool') {
+            return encodeBool(value);
+        }
+
+        if (type.startsWith('uint')) {
+            return encodeUint(type, value);
+        }
+
+        if (type.startsWith('int')) {
+            return encodeInt(type, value);
+        }
+
+        if (type.startsWith('bytes')) {
+            const size = type.slice(5);
+            if (size) {
+                return encodeBytesN(parseInt(size), value);
+            } else {
+                return encodeDynamicBytes(value);
+            }
+        }
+
+        if (type === 'string') {
+            return encodeString(value);
+        }
+
+        throw new Error(`Unsupported type for encoding: ${type}`);
+    }
+
+    function encodeAddress(value) {
+        const addr = value.toLowerCase().replace('0x', '');
+        if (addr.length !== 40) {
+            throw new Error(`Invalid address length: ${value}`);
+        }
+        if (!/^[0-9a-f]+$/i.test(addr)) {
+            throw new Error(`Invalid address format: ${value}`);
+        }
+        return addr.padStart(64, '0');
+    }
+
+    function encodeBool(value) {
+        const normalized = value.toString().toLowerCase().trim();
+        if (normalized === 'true' || normalized === '1') {
+            return '0'.repeat(63) + '1';
+        } else if (normalized === 'false' || normalized === '0') {
+            return '0'.repeat(64);
+        }
+        throw new Error(`Invalid boolean value: ${value}`);
+    }
+
+    function encodeUint(type, value) {
+        const bits = parseInt(type.slice(4)) || 256;
+        const maxValue = BigInt(2) ** BigInt(bits) - BigInt(1);
+
+        let val;
+        try {
+            val = BigInt(value);
+        } catch {
+            throw new Error(`Invalid uint value: ${value}`);
+        }
+
+        if (val < 0n) {
+            throw new Error(`Uint cannot be negative: ${value}`);
+        }
+        if (val > maxValue) {
+            throw new Error(`Value exceeds uint${bits} max: ${value}`);
+        }
+
+        return val.toString(16).padStart(64, '0');
+    }
+
+    function encodeInt(type, value) {
+        const bits = parseInt(type.slice(3)) || 256;
+        const maxPositive = BigInt(2) ** BigInt(bits - 1) - BigInt(1);
+        const minNegative = -(BigInt(2) ** BigInt(bits - 1));
+
+        let val;
+        try {
+            val = BigInt(value);
+        } catch {
+            throw new Error(`Invalid int value: ${value}`);
+        }
+
+        if (val > maxPositive || val < minNegative) {
+            throw new Error(`Value out of range for int${bits}: ${value}`);
+        }
+
+        // Two's complement for negative numbers
+        if (val < 0n) {
+            val = BigInt(2) ** BigInt(256) + val;
+        }
+
+        return val.toString(16).padStart(64, '0');
+    }
+
+    function encodeBytesN(n, value) {
+        let hex = value.replace('0x', '');
+        if (hex.length !== n * 2) {
+            throw new Error(`bytes${n} requires exactly ${n} bytes, got ${hex.length / 2}`);
+        }
+        if (!/^[0-9a-fA-F]*$/.test(hex)) {
+            throw new Error(`Invalid hex in bytes${n}: ${value}`);
+        }
+        return hex.toLowerCase().padEnd(64, '0');
+    }
+
+    function encodeDynamicBytes(value) {
+        const hex = value.replace('0x', '');
+        if (!/^[0-9a-fA-F]*$/.test(hex)) {
+            throw new Error(`Invalid hex in bytes: ${value}`);
+        }
+
+        const length = hex.length / 2;
+        const paddedLength = Math.ceil(hex.length / 64) * 64 || 64;
+
+        return encodeUint256(length) + hex.toLowerCase().padEnd(paddedLength, '0');
+    }
+
+    function encodeString(value) {
+        // Remove surrounding quotes if present
+        let str = value;
+        if (str.startsWith('"') && str.endsWith('"')) {
+            str = str.slice(1, -1);
+        }
+
+        // Convert string to UTF-8 hex
+        const encoder = new TextEncoder();
+        const bytes = encoder.encode(str);
+        let hex = '';
+        for (const byte of bytes) {
+            hex += byte.toString(16).padStart(2, '0');
+        }
+
+        const length = bytes.length;
+        const paddedLength = Math.ceil(hex.length / 64) * 64 || 64;
+
+        return encodeUint256(length) + hex.padEnd(paddedLength, '0');
+    }
+
+    function encodeUint256(value) {
+        return BigInt(value).toString(16).padStart(64, '0');
+    }
+
+    function encodeArray(baseType, sizeStr, value) {
+        const items = value.isArray ? value.items : value;
+        const isDynamic = !sizeStr; // Empty sizeStr means dynamic array
+
+        let result = '';
+
+        if (isDynamic) {
+            // Prepend length for dynamic arrays
+            result += encodeUint256(items.length);
+        }
+
+        if (isDynamicType(baseType)) {
+            // Dynamic elements: offsets in head, data in tail
+            const headSize = items.length * 32;
+            let currentOffset = headSize;
+            const heads = [];
+            const tails = [];
+
+            for (const item of items) {
+                heads.push(encodeUint256(currentOffset));
+                const itemValue = item.value !== undefined ? item.value : item;
+                const tailData = encodeParam(baseType, itemValue);
+                tails.push(tailData);
+                currentOffset += tailData.length / 2;
+            }
+
+            result += heads.join('') + tails.join('');
+        } else {
+            // Static elements: inline
+            for (const item of items) {
+                const itemValue = item.value !== undefined ? item.value : item;
+                result += encodeParam(baseType, itemValue);
+            }
+        }
+
+        return result;
+    }
+
+    function encodeTuple(type, value) {
+        const innerTypes = parseSignature(`f${type}`);
+        const fields = value.isTuple ? value.fields : value;
+
+        // Calculate head size
+        let headSize = 0;
+        for (const innerType of innerTypes) {
+            headSize += isDynamicType(innerType) ? 32 : getStaticSizeBytes(innerType);
+        }
+
+        // Build heads and tails
+        let currentOffset = headSize;
+        const heads = [];
+        const tails = [];
+
+        for (let i = 0; i < innerTypes.length; i++) {
+            const innerType = innerTypes[i];
+            const fieldValue = fields[i].value !== undefined ? fields[i].value : fields[i];
+
+            if (isDynamicType(innerType)) {
+                heads.push(encodeUint256(currentOffset));
+                const tailData = encodeParam(innerType, fieldValue);
+                tails.push(tailData);
+                currentOffset += tailData.length / 2;
+            } else {
+                heads.push(encodeParam(innerType, fieldValue));
+            }
+        }
+
+        return heads.join('') + tails.join('');
+    }
+
+    function getStaticSizeBytes(type) {
+        return getStaticSize(type) / 2; // Convert hex chars to bytes
     }
 });

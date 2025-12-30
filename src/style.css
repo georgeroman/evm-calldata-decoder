@@ -231,14 +231,9 @@ button.secondary:hover {
     color: var(--accent);
 }
 
-.params-table {
-    overflow-x: auto;
-}
-
 .param-row {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 0.5rem 1rem;
+    display: flex;
+    gap: 0.75rem;
     padding: 0.75rem;
     background: var(--bg-secondary);
     border-radius: 6px;
@@ -257,13 +252,16 @@ button.secondary:hover {
     padding: 0.2rem 0.5rem;
     background: var(--bg-tertiary);
     border-radius: 4px;
+    flex-shrink: 0;
 }
 
 .param-details {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
+    flex: 1;
     min-width: 0;
+    width: 100%;
 }
 
 .param-type-label {
@@ -295,12 +293,60 @@ button.secondary:hover {
     color: #98c379;
 }
 
+/* Editable value inputs */
+.param-value.editable {
+    display: block;
+    width: 100%;
+}
+
+.value-input {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 0 0.4rem;
+    color: inherit;
+    width: 100%;
+    resize: none;
+    overflow: hidden;
+    line-height: 1.4;
+    transition: border-color 0.2s, background 0.2s;
+}
+
+.value-input:hover {
+    border-color: var(--border);
+    background: var(--bg-tertiary);
+}
+
+.value-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: var(--bg-tertiary);
+}
+
+.value-input.error {
+    border-color: var(--error);
+    background: rgba(248, 81, 73, 0.1);
+}
+
+.value-input.success {
+    border-color: var(--success);
+    animation: flash-success 0.3s ease;
+}
+
+@keyframes flash-success {
+    0% { background: rgba(63, 185, 80, 0.3); }
+    100% { background: transparent; }
+}
+
 /* Tuple/Struct styling */
 .tuple-container,
 .array-container {
     font-family: var(--font-mono);
     font-size: 0.85rem;
     margin-top: 0.5rem;
+    width: 100%;
 }
 
 .collapsible-header {
@@ -400,15 +446,43 @@ button.secondary:hover {
     margin-left: 1.25rem;
     padding-left: 0.75rem;
     border-left: 2px solid var(--border);
+    width: calc(100% - 1.25rem);
 }
 
-.tuple-field,
-.array-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.75rem;
+.tuple-field {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    justify-items: start;
+    align-items: start;
+    gap: 0.25rem 0.75rem;
     padding: 0.4rem 0;
-    flex-wrap: wrap;
+    width: 100%;
+}
+
+.tuple-field > .param-value.bytes,
+.tuple-field > .param-value:has(.tuple-container),
+.tuple-field > .param-value:has(.array-container),
+.tuple-field > .tuple-container,
+.tuple-field > .array-container {
+    grid-column: 1 / -1;
+}
+
+.array-item {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    justify-items: start;
+    align-items: start;
+    gap: 0.25rem 0.75rem;
+    padding: 0.4rem 0;
+    width: 100%;
+}
+
+.array-item > .param-value.bytes,
+.array-item > .param-value:has(.tuple-container),
+.array-item > .param-value:has(.array-container),
+.array-item > .tuple-container,
+.array-item > .array-container {
+    grid-column: 1 / -1;
 }
 
 .tuple-field-index,
@@ -422,7 +496,13 @@ button.secondary:hover {
 .tuple-field-type {
     color: var(--accent);
     font-size: 0.8rem;
-    min-width: 80px;
+}
+
+.tuple-field > .param-value,
+.array-item > .param-value {
+    min-width: 0;
+    width: 100%;
+    word-break: break-all;
 }
 
 /* Nested tuple/array styling */
@@ -433,37 +513,24 @@ button.secondary:hover {
     margin-top: 0.25rem;
 }
 
-.tuple-field > .param-value,
-.array-item > .param-value {
-    word-break: break-all;
-}
-
-.tuple-field > .param-value.address {
+.tuple-field > .param-value.address,
+.array-item > .param-value.address {
     color: var(--success);
 }
 
-.tuple-field > .param-value.number {
+.tuple-field > .param-value.number,
+.array-item > .param-value.number {
     color: var(--warning);
 }
 
-.tuple-field > .param-value.bool {
+.tuple-field > .param-value.bool,
+.array-item > .param-value.bool {
     color: #c678dd;
 }
 
-.tuple-field > .param-value.string {
+.tuple-field > .param-value.string,
+.array-item > .param-value.string {
     color: #98c379;
-}
-
-.raw-calldata {
-    font-family: var(--font-mono);
-    font-size: 0.8rem;
-    word-break: break-all;
-    padding: 0.75rem;
-    background: var(--bg-secondary);
-    border-radius: 6px;
-    color: var(--text-secondary);
-    max-height: 150px;
-    overflow-y: auto;
 }
 
 .error {
