@@ -70,10 +70,11 @@ main {
 }
 
 .input-section .secondary-label {
-    margin-top: 1rem;
+    margin-top: 1.5rem;
 }
 
-#calldata-input {
+#calldata-input,
+#abi-input {
     width: 100%;
     min-height: 120px;
     padding: 1rem;
@@ -87,42 +88,15 @@ main {
     transition: border-color 0.2s;
 }
 
-#calldata-input:focus {
-    outline: none;
-    border-color: var(--accent);
-}
-
-#calldata-input::placeholder {
-    color: var(--text-secondary);
-}
-
-#abi-input {
-    width: 100%;
-    min-height: 140px;
-    padding: 1rem;
-    font-family: var(--font-mono);
-    font-size: 0.875rem;
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    color: var(--text-primary);
-    resize: vertical;
-    transition: border-color 0.2s;
-}
-
+#calldata-input:focus,
 #abi-input:focus {
     outline: none;
     border-color: var(--accent);
 }
 
+#calldata-input::placeholder,
 #abi-input::placeholder {
     color: var(--text-secondary);
-}
-
-.input-hint {
-    margin-top: 0.5rem;
-    color: var(--text-secondary);
-    font-size: 0.85rem;
 }
 
 .button-group {
