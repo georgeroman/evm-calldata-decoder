@@ -73,8 +73,7 @@ main {
     margin-top: 1.5rem;
 }
 
-#calldata-input,
-#abi-input {
+.input-textarea {
     width: 100%;
     min-height: 120px;
     padding: 1rem;
@@ -88,14 +87,12 @@ main {
     transition: border-color 0.2s;
 }
 
-#calldata-input:focus,
-#abi-input:focus {
+.input-textarea:focus {
     outline: none;
     border-color: var(--accent);
 }
 
-#calldata-input::placeholder,
-#abi-input::placeholder {
+.input-textarea::placeholder {
     color: var(--text-secondary);
 }
 
