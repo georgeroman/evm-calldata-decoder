@@ -1,5 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
     const calldataInput = document.getElementById('calldata-input');
+    const abiInput = document.getElementById('abi-input');
     const decodeBtn = document.getElementById('decode-btn');
     const clearBtn = document.getElementById('clear-btn');
     const placeholder = document.getElementById('placeholder');
@@ -7,6 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const error = document.getElementById('error');
     const loading = document.getElementById('loading');
     const selectorBadge = document.getElementById('selector-badge');
+    const sourceBadge = document.getElementById('source-badge');
     const signaturesList = document.getElementById('signatures-list');
     const paramsTable = document.getElementById('params-table');
     const paramsCard = document.getElementById('params-card');
@@ -39,6 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function clear() {
         calldataInput.value = '';
+        abiInput.value = '';
         currentCalldata = '';
         currentSignatures = [];
         decodedModel = null;
@@ -49,6 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function decode() {
         const input = calldataInput.value.trim();
+        const abiText = abiInput.value.trim();
 
         if (!input) {
             showError('Please enter calldata to decode');
@@ -79,15 +83,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             const signatures = await fetchSignatures(selector);
-            currentSignatures = signatures;
+            let resolvedSignatures = signatures;
+            let source = '4byte.directory';
 
-            if (signatures.length === 0) {
-                showError(`No matching function signatures found for selector ${selector}`);
+            if (resolvedSignatures.length === 0 && abiText) {
+                resolvedSignatures = getSignaturesFromAbi(abiText, selector);
+                source = 'Pasted ABI';
+            }
+
+            currentSignatures = resolvedSignatures;
+
+            if (resolvedSignatures.length === 0) {
+                showError(
+                    abiText
+                        ? `No matching function signatures found for selector ${selector} on 4byte.directory or in the pasted ABI`
+                        : `No matching function signatures found for selector ${selector}. Paste an ABI to try a local fallback.`
+                );
                 return;
             }
 
-            displayResult(selector, signatures, calldata);
+            displayResult(selector, resolvedSignatures, calldata, source);
         } catch (err) {
+            if (err instanceof AbiParseError) {
+                showError(`4byte.directory returned no matches, and the pasted ABI could not be used: ${err.message}`);
+                return;
+            }
+
             showError(`Failed to fetch signatures: ${err.message}`);
         }
     }
@@ -105,10 +126,11 @@ document.addEventListener('DOMContentLoaded', () => {
         return data.results.map(r => r.text_signature).sort((a, b) => a.length - b.length);
     }
 
-    function displayResult(selector, signatures, calldata) {
+    function displayResult(selector, signatures, calldata, source) {
         showState('result');
 
         selectorBadge.textContent = selector;
+        sourceBadge.textContent = source;
 
         // Display signatures
         signaturesList.innerHTML = '';
@@ -150,6 +172,59 @@ document.addEventListener('DOMContentLoaded', () => {
         const params = match[2];
 
         return `<span class="function-name">${escapeHtml(name)}</span>(<span class="param-type">${escapeHtml(params)}</span>)`;
+    }
+
+    class AbiParseError extends Error {}
+
+    function getSignaturesFromAbi(abiText, selector) {
+        if (!window.ethers || typeof window.ethers.id !== 'function') {
+            throw new AbiParseError('selector hashing is unavailable because ethers.js did not load');
+        }
+
+        let parsedAbi;
+        try {
+            parsedAbi = JSON.parse(abiText);
+        } catch {
+            throw new AbiParseError('ABI must be valid JSON');
+        }
+
+        const abiEntries = Array.isArray(parsedAbi) ? parsedAbi : parsedAbi?.abi;
+        if (!Array.isArray(abiEntries)) {
+            throw new AbiParseError('ABI JSON must be an array or an object with an "abi" array');
+        }
+
+        const matchedSignatures = abiEntries
+            .filter(entry => entry && entry.type === 'function' && typeof entry.name === 'string')
+            .map(buildSignatureFromAbiEntry)
+            .filter(Boolean)
+            .filter(signature => window.ethers.id(signature).slice(0, 10).toLowerCase() === selector)
+            .sort((a, b) => a.length - b.length);
+
+        return [...new Set(matchedSignatures)];
+    }
+
+    function buildSignatureFromAbiEntry(entry) {
+        const inputs = Array.isArray(entry.inputs) ? entry.inputs : [];
+        const types = inputs.map(formatAbiInputType);
+        return `${entry.name}(${types.join(',')})`;
+    }
+
+    function formatAbiInputType(input) {
+        if (!input || typeof input.type !== 'string') {
+            throw new AbiParseError('ABI function inputs must include a type');
+        }
+
+        if (!input.type.startsWith('tuple')) {
+            return input.type;
+        }
+
+        if (!Array.isArray(input.components)) {
+            throw new AbiParseError(`Tuple input "${input.name || '(unnamed)'}" is missing components`);
+        }
+
+        const tupleSuffix = input.type.slice('tuple'.length);
+        const componentTypes = input.components.map(formatAbiInputType);
+        return `(${componentTypes.join(',')})${tupleSuffix}`;
     }
 
     function displayParams(signature, calldata) {

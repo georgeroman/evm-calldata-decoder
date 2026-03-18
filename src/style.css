@@ -69,6 +69,10 @@ main {
     color: var(--text-primary);
 }
 
+.input-section .secondary-label {
+    margin-top: 1rem;
+}
+
 #calldata-input {
     width: 100%;
     min-height: 120px;
@@ -90,6 +94,35 @@ main {
 
 #calldata-input::placeholder {
     color: var(--text-secondary);
+}
+
+#abi-input {
+    width: 100%;
+    min-height: 140px;
+    padding: 1rem;
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    resize: vertical;
+    transition: border-color 0.2s;
+}
+
+#abi-input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+#abi-input::placeholder {
+    color: var(--text-secondary);
+}
+
+.input-hint {
+    margin-top: 0.5rem;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
 }
 
 .button-group {
@@ -157,6 +190,13 @@ button.secondary:hover {
     font-weight: 600;
 }
 
+.result-badges {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
 .selector-badge {
     font-family: var(--font-mono);
     font-size: 0.8rem;
@@ -164,6 +204,15 @@ button.secondary:hover {
     padding: 0.35rem 0.75rem;
     border-radius: 6px;
     color: var(--accent);
+}
+
+.source-badge {
+    font-size: 0.75rem;
+    background: rgba(63, 185, 80, 0.12);
+    border: 1px solid rgba(63, 185, 80, 0.35);
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    color: var(--success);
 }
 
 .result-card {

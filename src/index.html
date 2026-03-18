@@ -21,6 +21,13 @@
                     placeholder="0x23b872dd000000000000000000000000..."
                     spellcheck="false"
                 ></textarea>
+                <label for="abi-input" class="secondary-label">Optional ABI fallback:</label>
+                <textarea
+                    id="abi-input"
+                    placeholder='[{"type":"function","name":"transferFrom","inputs":[{"name":"from","type":"address"},{"name":"to","type":"address"},{"name":"amount","type":"uint256"}]}]'
+                    spellcheck="false"
+                ></textarea>
+                <p class="input-hint">Used only if 4byte.directory returns no signatures for the selector.</p>
                 <div class="button-group">
                     <button id="decode-btn">Decode</button>
                     <button id="clear-btn" class="secondary">Clear</button>
@@ -34,7 +41,10 @@
                 <div class="result" id="result" style="display: none;">
                     <div class="result-header">
                         <h2>Decoded Result</h2>
-                        <span class="selector-badge" id="selector-badge"></span>
+                        <div class="result-badges">
+                            <span class="source-badge" id="source-badge"></span>
+                            <span class="selector-badge" id="selector-badge"></span>
+                        </div>
                     </div>
 
                     <div class="result-card" id="function-info">
@@ -64,6 +74,7 @@
         </footer>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/ethers@6/dist/ethers.umd.min.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
