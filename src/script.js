@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentSignatures = [];
     let decodedModel = null;      // Stores decoded structure for re-encoding
     let currentTypes = [];        // Parameter types from signature
-    let currentSelector = '';     // 4-byte function selector
+    let currentSelector = '';     // 4-byte selector
 
     decodeBtn.addEventListener('click', decode);
     clearBtn.addEventListener('click', clear);
@@ -86,9 +86,10 @@ document.addEventListener('DOMContentLoaded', () => {
             let resolvedSignatures = signatures;
             let source = '4byte.directory';
 
-            if (resolvedSignatures.length === 0 && abiText) {
-                resolvedSignatures = getSignaturesFromAbi(abiText, selector);
-                source = 'Pasted ABI';
+            if (resolvedSignatures.length === 0) {
+                const localFallback = getLocalFallbackSignatures(selector, abiText);
+                resolvedSignatures = localFallback.signatures;
+                source = localFallback.source;
             }
 
             currentSignatures = resolvedSignatures;
@@ -96,8 +97,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (resolvedSignatures.length === 0) {
                 showError(
                     abiText
-                        ? `No matching function signatures found for selector ${selector} on 4byte.directory or in the pasted ABI`
-                        : `No matching function signatures found for selector ${selector}. Paste an ABI to try a local fallback.`
+                        ? `No matching signatures found for selector ${selector} on 4byte.directory, in the pasted ABI, or in the built-in error set`
+                        : `No matching signatures found for selector ${selector}. Paste an ABI to try a local fallback.`
                 );
                 return;
             }
@@ -176,6 +177,46 @@ document.addEventListener('DOMContentLoaded', () => {
 
     class AbiParseError extends Error {}
 
+    function getLocalFallbackSignatures(selector, abiText) {
+        const builtInSignatures = getBuiltInErrorSignatures(selector);
+        let abiSignatures = [];
+
+        if (abiText) {
+            try {
+                abiSignatures = getSignaturesFromAbi(abiText, selector);
+            } catch (err) {
+                if (builtInSignatures.length === 0) {
+                    throw err;
+                }
+            }
+        }
+
+        const signatures = [...new Set([...builtInSignatures, ...abiSignatures])].sort((a, b) => a.length - b.length);
+
+        if (signatures.length === 0) {
+            return { signatures: [], source: '4byte.directory' };
+        }
+
+        if (builtInSignatures.length > 0 && abiSignatures.length > 0) {
+            return { signatures, source: 'Built-in + ABI fallback' };
+        }
+
+        if (builtInSignatures.length > 0) {
+            return { signatures, source: 'Built-in errors' };
+        }
+
+        return { signatures, source: 'Pasted ABI' };
+    }
+
+    function getBuiltInErrorSignatures(selector) {
+        const builtInErrors = {
+            '0x08c379a0': 'Error(string)',
+            '0x4e487b71': 'Panic(uint256)'
+        };
+
+        return builtInErrors[selector] ? [builtInErrors[selector]] : [];
+    }
+
     function getSignaturesFromAbi(abiText, selector) {
         if (!window.ethers || typeof window.ethers.id !== 'function') {
             throw new AbiParseError('selector hashing is unavailable because ethers.js did not load');
@@ -194,7 +235,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const matchedSignatures = abiEntries
-            .filter(entry => entry && entry.type === 'function' && typeof entry.name === 'string')
+            .filter(entry => entry && (entry.type === 'function' || entry.type === 'error') && typeof entry.name === 'string')
             .map(buildSignatureFromAbiEntry)
             .filter(Boolean)
             .filter(signature => window.ethers.id(signature).slice(0, 10).toLowerCase() === selector)
@@ -211,7 +252,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function formatAbiInputType(input) {
         if (!input || typeof input.type !== 'string') {
-            throw new AbiParseError('ABI function inputs must include a type');
+            throw new AbiParseError('ABI inputs must include a type');
         }
 
         if (!input.type.startsWith('tuple')) {
